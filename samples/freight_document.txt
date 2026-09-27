@@ -1,0 +1,27 @@
+===================================================
+FREIGHT RATE CONFIRMATION & ORDER AGREEMENT
+===================================================
+
+Ref #: LD-994821
+Carrier: Apex Logistics Solutions LLC
+Date: 10/12/2025
+
+PICKUP DETAILS:
+Origin: Distribution Center 4, Dallas, TX 75201
+Date: Oct 14, 2025 @ 08:00 CST
+
+DROP-OFF DETAILS:
+Destination: Warehouse B, Atlanta, GA 30303
+Date: Oct 16, 2025 @ 14:00 EST
+
+CARGO DETAILS:
+Description: Industrial Machinery Parts
+Total Weight: 46,800 lbs (Gross)
+
+FINANCIAL AGREEMENT:
+Linehaul Rate: $2,200.00
+Fuel Surcharge (FSC): $350.00
+---------------------------------------------------
+Total Agreed Amount: $2,800.00
+
+Special Instructions: Driver must check in with security upon arrival. Call dispatch for unloading door assignment.
