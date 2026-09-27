@@ -19,7 +19,7 @@ Freight operations receive inconsistent rate confirmations and order agreements.
 
 ## Technology stack
 
-Python 3.10+, OpenAI Python SDK, Pydantic v2, PyMuPDF, python-dotenv, pytest, and ReportLab (only for regenerating the included selectable-text sample PDF).
+Python 3.10+, OpenAI Python SDK, Pydantic v2, PyMuPDF, python-dotenv, and pytest.
 
 ## Architecture
 
@@ -68,7 +68,6 @@ freightguard-ai/
 │   ├── freight_document.txt
 │   ├── freight_document.pdf
 │   └── expected_output.json
-├── scripts/create_sample_pdf.py
 ├── tests/
 ├── main.py
 ├── requirements.txt
@@ -199,11 +198,3 @@ At 100,000 documents per day the average arrival rate is about 1.16 documents pe
 - Live quality depends on the configured model and should be measured with a versioned evaluation corpus.
 - Additional currencies, unit conversion, carrier compliance checks, and confidence/review tooling can be added as explicit deterministic policies.
 - For reproducibility in regulated deployments, pin an exact model snapshot after evaluation rather than relying indefinitely on an alias.
-
-## Regenerating the sample PDF
-
-The checked-in PDF is selectable text. To regenerate it from the canonical text fixture:
-
-```bash
-python scripts/create_sample_pdf.py
-```
