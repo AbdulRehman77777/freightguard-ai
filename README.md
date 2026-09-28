@@ -85,7 +85,7 @@ freightguard-ai/
 Python 3.10 or newer is required.
 
 ```bash
-git clone <ACTUAL_REPOSITORY_URL>
+git clone https://github.com/AbdulRehman77777/freightguard-ai.git
 cd freightguard-ai
 python -m venv .venv
 ```
