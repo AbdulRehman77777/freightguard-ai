@@ -1,4 +1,4 @@
-"""Groq Structured Outputs extraction service."""
+"""Groq and OpenAI Structured Outputs extraction services."""
 
 from __future__ import annotations
 
@@ -30,17 +30,23 @@ The total_pay field must be the total explicitly stated in the source, never you
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 
 
-class GroqExtractionService:
-    """Extract freight fields through Groq's OpenAI-compatible Responses API."""
+class StructuredExtractionService:
+    """Shared schema-constrained extraction for OpenAI-compatible Responses APIs."""
+
+    provider_name = "LLM"
+    api_key_name = "API key"
+    base_url: str | None = None
 
     def __init__(self, settings: Settings | None = None, client: Any | None = None) -> None:
         self.settings = settings or load_settings()
-        self.client = client or OpenAI(
-            api_key=self.settings.api_key,
-            base_url=GROQ_BASE_URL,
-            timeout=self.settings.timeout_seconds,
-            max_retries=self.settings.max_retries,
-        )
+        client_options = {
+            "api_key": self.settings.api_key,
+            "timeout": self.settings.timeout_seconds,
+            "max_retries": self.settings.max_retries,
+        }
+        if self.base_url:
+            client_options["base_url"] = self.base_url
+        self.client = client or OpenAI(**client_options)
 
     def extract(self, raw_text: str) -> ExtractionFreightDocument:
         if not raw_text or not raw_text.strip():
@@ -55,15 +61,23 @@ class GroqExtractionService:
                 text_format=ExtractionFreightDocument,
             )
         except openai.AuthenticationError as exc:
-            raise DocumentExtractionError("Groq authentication failed. Check GROQ_API_KEY.") from exc
+            raise DocumentExtractionError(
+                f"{self.provider_name} authentication failed. Check {self.api_key_name}."
+            ) from exc
         except openai.RateLimitError as exc:
-            raise DocumentExtractionError(_rate_limit_message(exc)) from exc
+            raise DocumentExtractionError(_rate_limit_message(exc, self.provider_name)) from exc
         except openai.APITimeoutError as exc:
-            raise DocumentExtractionError("Groq request timed out after bounded retries.") from exc
+            raise DocumentExtractionError(
+                f"{self.provider_name} request timed out after bounded retries."
+            ) from exc
         except openai.APIConnectionError as exc:
-            raise DocumentExtractionError("Unable to connect to the Groq API.") from exc
+            raise DocumentExtractionError(
+                f"Unable to connect to the {self.provider_name} API."
+            ) from exc
         except openai.APIError as exc:
-            raise DocumentExtractionError("The Groq API returned an error.") from exc
+            raise DocumentExtractionError(
+                f"The {self.provider_name} API returned an error."
+            ) from exc
         except Exception as exc:
             raise DocumentExtractionError("Structured extraction failed unexpectedly.") from exc
 
@@ -78,6 +92,34 @@ class GroqExtractionService:
         return parsed
 
 
+class GroqExtractionService(StructuredExtractionService):
+    """Extract freight fields through Groq's OpenAI-compatible Responses API."""
+
+    provider_name = "Groq"
+    api_key_name = "GROQ_API_KEY"
+    base_url = GROQ_BASE_URL
+
+
+class OpenAIExtractionService(StructuredExtractionService):
+    """Extract freight fields through the official OpenAI Responses API."""
+
+    provider_name = "OpenAI"
+    api_key_name = "OPENAI_API_KEY"
+
+
+def create_extraction_service(settings: Settings | None = None) -> StructuredExtractionService:
+    """Build the configured provider without affecting downstream validation."""
+    selected = settings or load_settings()
+    services = {
+        "groq": GroqExtractionService,
+        "openai": OpenAIExtractionService,
+    }
+    service = services.get(selected.provider)
+    if service is None:
+        raise DocumentExtractionError(f"Unsupported LLM provider: {selected.provider}")
+    return service(selected)
+
+
 def _find_refusal(response: Any) -> str | None:
     for item in getattr(response, "output", []) or []:
         for content in getattr(item, "content", []) or []:
@@ -86,16 +128,20 @@ def _find_refusal(response: Any) -> str | None:
     return None
 
 
-def _rate_limit_message(exc: openai.RateLimitError) -> str:
+def _rate_limit_message(exc: openai.RateLimitError, provider_name: str) -> str:
     """Classify common rate-limit failures without exposing provider payloads."""
     body = getattr(exc, "body", None)
     body_code = body.get("code", "") if isinstance(body, dict) else ""
     body_type = body.get("type", "") if isinstance(body, dict) else ""
     code = str(getattr(exc, "code", "") or body_code).lower()
     error_type = str(body_type).lower()
-    quota_codes = {"insufficient_quota", "billing_hard_limit_reached", "credit_balance_exhausted"}
+    quota_codes = {
+        "insufficient_quota",
+        "billing_hard_limit_reached",
+        "credit_balance_exhausted",
+    }
     if code in quota_codes or error_type == "insufficient_quota":
-        return "Groq quota or billing limit was reached after bounded retries."
+        return f"{provider_name} quota or billing limit was reached after bounded retries."
     if "token" in code:
-        return "Groq token rate limit was exceeded after bounded retries."
-    return "Groq request rate limit was exceeded after bounded retries."
+        return f"{provider_name} token rate limit was exceeded after bounded retries."
+    return f"{provider_name} request rate limit was exceeded after bounded retries."

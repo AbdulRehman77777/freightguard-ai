@@ -4,7 +4,7 @@
 
 ## Project overview
 
-FreightGuard AI is a production-minded Python CLI that converts unstructured freight documents into validated JSON and makes a conservative, deterministic approval decision. It accepts UTF-8 text and selectable-text PDFs, uses Groq Structured Outputs only for field extraction, and keeps schema enforcement and business decisions in ordinary Python.
+FreightGuard AI is a production-minded Python CLI that converts unstructured freight documents into validated JSON and makes a conservative, deterministic approval decision. It accepts UTF-8 text and selectable-text PDFs, supports Groq and OpenAI Structured Outputs for field extraction, and keeps schema enforcement and business decisions in ordinary Python.
 
 ## Problem statement
 
@@ -13,7 +13,7 @@ Freight operations receive inconsistent rate confirmations and order agreements.
 ## Features
 
 - TXT and multi-page PDF text extraction with empty/scanned-document detection
-- Prompt-injection-aware Groq extraction using strict JSON Schema Structured Outputs and Pydantic
+- Selectable Groq or official OpenAI extraction using Structured Outputs and Pydantic
 - Nullable extraction schema followed by a strict final schema
 - Decimal-based rate reconciliation and a 45,000 lb weight rule
 - Complete issue collection in deterministic order
@@ -23,7 +23,7 @@ Freight operations receive inconsistent rate confirmations and order agreements.
 
 ## Technology stack
 
-Python 3.10+, the OpenAI-compatible Python SDK, Groq API, Pydantic v2, PyMuPDF, python-dotenv, and pytest.
+Python 3.10+, official OpenAI Python SDK, Groq/OpenAI APIs, Pydantic v2, PyMuPDF, python-dotenv, and pytest.
 
 ## Architecture
 
@@ -34,7 +34,8 @@ TXT / selectable PDF / raw text
        Document reader
               |
               v
-  Groq Structured Outputs
+  Selected LLM provider
+   (Groq or OpenAI)
  (nullable extraction model)
               |
               v
@@ -64,7 +65,7 @@ freightguard-ai/
 │   ├── decision.py           # APPROVED / human-review decision
 │   ├── document_reader.py    # TXT and PDF readers
 │   ├── exceptions.py         # Safe domain exceptions
-│   ├── extractor.py          # Groq Responses API integration
+│   ├── extractor.py          # Groq/OpenAI services and provider factory
 │   ├── pipeline.py           # Workflow orchestration
 │   ├── schemas.py            # Extraction, strict, issue, and result models
 │   └── validator.py          # Deterministic business rules
@@ -109,18 +110,28 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Replace the placeholder in `.env` with a valid Groq API key. Never commit `.env`.
+Keep `LLM_PROVIDER=groq` and replace the Groq placeholder for the default setup, or select `openai` and configure its key instead. Never commit `.env`.
+
+## LLM providers
+
+Groq is the default provider and uses its OpenAI-compatible endpoint at `https://api.groq.com/openai/v1` with `openai/gpt-oss-20b`. This path has been verified with a successful live extraction. OpenAI is an optional provider using the official endpoint, official Python SDK, and `client.responses.parse`; it is covered by mocked integration tests but could not be verified live because the available account previously returned `credit_balance_exhausted` / `insufficient_quota`.
+
+Both services use the same extraction prompt and nullable `ExtractionFreightDocument` model. Provider selection changes only the API boundary: the strict final schema, deterministic business validation, decision engine, and public JSON result are shared.
 
 ## Environment configuration
 
 | Variable | Required | Default | Purpose |
 |---|---:|---|---|
-| `GROQ_API_KEY` | Yes | none | Groq API credential |
+| `LLM_PROVIDER` | No | `groq` | Extraction provider: `groq` or `openai` |
+| `GROQ_API_KEY` | For Groq | none | Groq API credential |
 | `GROQ_MODEL` | No | `openai/gpt-oss-20b` | Strict Structured Outputs-capable model |
 | `GROQ_TIMEOUT_SECONDS` | No | `60` | Bounded request timeout (max 300) |
+| `OPENAI_API_KEY` | For OpenAI | none | Official OpenAI API credential |
+| `OPENAI_MODEL` | No | `gpt-4o-mini` | OpenAI Structured Outputs-capable model |
+| `OPENAI_TIMEOUT_SECONDS` | No | `60` | Bounded request timeout (max 300) |
 | `MAX_EXTRACTION_RETRIES` | No | `2` | SDK retries for transient errors (max 5) |
 
-`openai/gpt-oss-20b` supports Groq's strict Structured Outputs mode and the OpenAI-compatible Responses API used here. If the model is changed, choose one listed by Groq as supporting `strict: true` JSON Schema output.
+Only the selected provider's key is required. Invalid `LLM_PROVIDER` values fail safely before an API request. If a model is changed, choose one supported by that provider for schema-constrained Structured Outputs.
 
 ## Running the application
 
@@ -128,6 +139,20 @@ Text input:
 
 ```bash
 python main.py --input samples/freight_document.txt
+```
+
+Select Groq (the default) or OpenAI in `.env`, or for one command on macOS/Linux:
+
+```bash
+LLM_PROVIDER=groq python main.py --input samples/freight_document.txt
+LLM_PROVIDER=openai python main.py --input samples/freight_document.txt
+```
+
+On PowerShell:
+
+```powershell
+$env:LLM_PROVIDER="groq"; python main.py --input samples/freight_document.txt
+$env:LLM_PROVIDER="openai"; python main.py --input samples/freight_document.txt
 ```
 
 PDF input:
@@ -168,7 +193,17 @@ The included sample states a `$2,200.00` linehaul rate, `$350.00` fuel surcharge
 }
 ```
 
-The expected fixture is the deterministic target, not a claim of a successful live API run. The included `.txt` accurately preserves the provided case content, and the `.pdf` is a reconstructed selectable-text fixture created from that content; it is not the original uploaded PDF. The original `Document.pdf` was not available in this workspace and therefore was not tested. Add it separately under `samples/` before submission if it becomes available.
+The document artifacts are deliberately distinguished:
+
+| Artifact | Provenance | Verification |
+|---|---|---|
+| `samples/freight_document.txt` | Plain-text test fixture preserving the supplied case content | Reader and mocked pipeline tests |
+| `samples/freight_document.pdf` | Reconstructed selectable-text fixture created from that content | PDF reader tests; not the original upload |
+| `samples/original_document.pdf` | Reserved path for the byte-for-byte employer-supplied `Document.pdf` | Not present: `Document.pdf` was not available anywhere in the workspace |
+| `samples/expected_output.json` | Deterministic expected result | Compared in automated tests |
+| `samples/actual_output.json` | Successful live Groq result for the text fixture | Exactly matches expected output |
+
+No substitute has been created or labeled as the original. If `Document.pdf` becomes available, it should be copied byte-for-byte to `samples/original_document.pdf`, verified with the existing reader, and processed live before adding `actual_output_pdf.json`.
 
 A live Groq request using `openai/gpt-oss-20b` successfully extracted the supplied text fixture. The checked-in `samples/actual_output.json` exactly matches `samples/expected_output.json`: it preserves `total_pay` as `2800.0`, reports `RATE_MISMATCH` and `OVERWEIGHT_LOAD`, and returns `FLAGGED_FOR_HUMAN_REVIEW`.
 
@@ -192,7 +227,7 @@ The SDK uses a bounded timeout and bounded retries. Authentication failures, rat
 
 ## Architecture and scalability note
 
-The application uses Groq's strict Structured Outputs through its OpenAI-compatible endpoint and `client.responses.parse`, with `ExtractionFreightDocument` supplied as the native Pydantic `text_format`. This sends a strict JSON Schema to Groq and returns a typed model, which is materially safer than asking for arbitrary JSON in a prompt and manually decoding it. The extraction prompt additionally requires faithful source values, nulls for unavailable data, and no commentary, but prompt text is not the enforcement mechanism—the API schema is.
+The application uses provider-native Structured Outputs through `client.responses.parse`, with `ExtractionFreightDocument` supplied as the native Pydantic `text_format`. Groq uses its OpenAI-compatible base URL while OpenAI uses the official endpoint; both constrain the response to the same strict JSON Schema and return the same typed model. This is materially safer than asking for arbitrary JSON in a prompt and manually decoding it. The prompt requires faithful source values, nulls for unavailable data, and no commentary, but prompt text is not the enforcement mechanism—the API schema is.
 
 Validation then moves from the nullable extraction model—which allows genuinely missing or ambiguous values to be represented as `null` without hallucination—to strict `FreightDocument`. The final schema rejects missing fields, extras, type coercion, blanks, malformed locations and ZIPs, negative/non-finite money, and negative weight, so missing or invalid data cannot be approved. Independent deterministic Python rules reconcile money with `Decimal`, enforce the weight limit, and make the decision; the LLM does not calculate replacement totals or approve documents. For production scale, PDFs would land in object storage such as Amazon S3 and produce jobs in a durable queue such as Amazon SQS. Horizontally scalable workers would perform PDF text extraction, use OCR as a fallback for scanned pages, call the LLM extractor, apply Pydantic and business validation, persist results, and route flagged records to human review. This is a scaling design, not infrastructure implemented by the current synchronous CLI.
 
@@ -202,7 +237,8 @@ At 100,000 documents per day the average arrival rate is about 1.16 documents pe
 
 - Scanned/image-only PDFs need an OCR service before extraction.
 - The original uploaded `Document.pdf` is unavailable locally; the checked-in PDF is a reconstructed selectable-text fixture and has been tested only as such.
-- Live LLM calls require a configured Groq API key and depend on provider availability and rate limits.
+- Live LLM calls require a key for the selected provider and depend on provider availability, quota, and rate limits.
+- OpenAI is implemented and mock-tested, but live OpenAI verification remains unavailable due to insufficient API quota.
 - The CLI processes one document at a time; batch queues and persistence are future production concerns.
 - Live quality depends on the configured model and should be measured with a versioned evaluation corpus.
 - Additional currencies, unit conversion, carrier compliance checks, and confidence/review tooling can be added as explicit deterministic policies.

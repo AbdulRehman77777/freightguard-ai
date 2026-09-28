@@ -1,7 +1,13 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+import pytest
 
 from freight_agent.exceptions import DocumentExtractionError
+from freight_agent.config import Settings
+from freight_agent.extractor import GroqExtractionService, OpenAIExtractionService
 from freight_agent.pipeline import process_document
 from freight_agent.schemas import DecisionStatus, ExtractionFreightDocument
 
@@ -49,3 +55,28 @@ def test_empty_input_never_approved():
     result = process_document("   ", StubExtractor(None))
     assert result.status == DecisionStatus.FLAGGED_FOR_HUMAN_REVIEW
     assert result.issues[0].code == "PROCESSING_ERROR"
+
+
+@pytest.mark.parametrize(
+    ("provider", "service_class", "model"),
+    [
+        ("groq", GroqExtractionService, "openai/gpt-oss-20b"),
+        ("openai", OpenAIExtractionService, "gpt-4o-mini"),
+    ],
+)
+def test_provider_choice_does_not_change_business_decision(
+    valid_data, provider, service_class, model
+):
+    valid_data.update(total_pay=2800.0, weight_lbs=46800)
+    parsed = ExtractionFreightDocument.model_validate(valid_data)
+    client = Mock()
+    client.responses.parse.return_value = SimpleNamespace(output_parsed=parsed, output=[])
+    provider_settings = Settings(
+        api_key="test", model=model, provider=provider, max_retries=0
+    )
+
+    result = process_document("sample", service_class(provider_settings, client))
+
+    assert result.status == DecisionStatus.FLAGGED_FOR_HUMAN_REVIEW
+    assert [issue.code for issue in result.issues] == ["RATE_MISMATCH", "OVERWEIGHT_LOAD"]
+    assert result.document.total_pay == 2800.0
