@@ -1,0 +1,40 @@
+{
+  "status": "FLAGGED_FOR_HUMAN_REVIEW",
+  "document": {
+    "carrier_name": "Apex Logistics Solutions LLC",
+    "load_number": "LD-994821",
+    "pickup_location": {
+      "city": "Dallas",
+      "state": "TX",
+      "zip": "75201"
+    },
+    "delivery_location": {
+      "city": "Atlanta",
+      "state": "GA",
+      "zip": "30303"
+    },
+    "total_linehaul_rate": 2200.0,
+    "fuel_surcharge": 350.0,
+    "total_pay": 2800.0,
+    "weight_lbs": 46800
+  },
+  "issues": [
+    {
+      "code": "RATE_MISMATCH",
+      "severity": "ERROR",
+      "message": "Calculated payment is $2,550.00, but the document states $2,800.00. Difference: $250.00.",
+      "field": "total_pay",
+      "expected_value": 2550.0,
+      "actual_value": 2800.0
+    },
+    {
+      "code": "OVERWEIGHT_LOAD",
+      "severity": "WARNING",
+      "message": "Load weight of 46,800 lbs exceeds the 45,000 lbs threshold by 1,800 lbs.",
+      "field": "weight_lbs",
+      "expected_value": 45000,
+      "actual_value": 46800
+    }
+  ],
+  "summary": "Document requires human review due to a $250.00 payment discrepancy and an overweight load."
+}

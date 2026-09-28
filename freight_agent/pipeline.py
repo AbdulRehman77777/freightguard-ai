@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 from .decision import decide, summarize
 from .exceptions import ConfigurationError, DocumentExtractionError
-from .extractor import OpenAIExtractionService
+from .extractor import GroqExtractionService
 from .schemas import (
     DecisionStatus,
     ExtractionFreightDocument,
@@ -32,7 +32,7 @@ class FreightProcessingPipeline:
         if not raw_text or not raw_text.strip():
             return _failure("PROCESSING_ERROR", "Document text is empty.")
         try:
-            extractor = self._extractor or OpenAIExtractionService()
+            extractor = self._extractor or GroqExtractionService()
             extracted = extractor.extract(raw_text)
         except (ConfigurationError, DocumentExtractionError) as exc:
             return _failure("EXTRACTION_FAILED", str(exc))

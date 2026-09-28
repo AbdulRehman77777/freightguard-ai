@@ -9,4 +9,3 @@ dist/
 build/
 *.egg-info/
 .DS_Store
-samples/actual_output.json

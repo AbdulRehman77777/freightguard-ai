@@ -1,4 +1,4 @@
-"""OpenAI Structured Outputs extraction service."""
+"""Groq Structured Outputs extraction service."""
 
 from __future__ import annotations
 
@@ -27,14 +27,17 @@ Rules:
 
 The total_pay field must be the total explicitly stated in the source, never your calculation. Financial consistency is checked later by deterministic code."""
 
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 
-class OpenAIExtractionService:
-    """Extract freight fields through the Responses API's native Pydantic parser."""
+
+class GroqExtractionService:
+    """Extract freight fields through Groq's OpenAI-compatible Responses API."""
 
     def __init__(self, settings: Settings | None = None, client: Any | None = None) -> None:
         self.settings = settings or load_settings()
         self.client = client or OpenAI(
             api_key=self.settings.api_key,
+            base_url=GROQ_BASE_URL,
             timeout=self.settings.timeout_seconds,
             max_retries=self.settings.max_retries,
         )
@@ -52,15 +55,15 @@ class OpenAIExtractionService:
                 text_format=ExtractionFreightDocument,
             )
         except openai.AuthenticationError as exc:
-            raise DocumentExtractionError("OpenAI authentication failed. Check OPENAI_API_KEY.") from exc
+            raise DocumentExtractionError("Groq authentication failed. Check GROQ_API_KEY.") from exc
         except openai.RateLimitError as exc:
             raise DocumentExtractionError(_rate_limit_message(exc)) from exc
         except openai.APITimeoutError as exc:
-            raise DocumentExtractionError("OpenAI request timed out after bounded retries.") from exc
+            raise DocumentExtractionError("Groq request timed out after bounded retries.") from exc
         except openai.APIConnectionError as exc:
-            raise DocumentExtractionError("Unable to connect to the OpenAI API.") from exc
+            raise DocumentExtractionError("Unable to connect to the Groq API.") from exc
         except openai.APIError as exc:
-            raise DocumentExtractionError("The OpenAI API returned an error.") from exc
+            raise DocumentExtractionError("The Groq API returned an error.") from exc
         except Exception as exc:
             raise DocumentExtractionError("Structured extraction failed unexpectedly.") from exc
 
@@ -92,7 +95,7 @@ def _rate_limit_message(exc: openai.RateLimitError) -> str:
     error_type = str(body_type).lower()
     quota_codes = {"insufficient_quota", "billing_hard_limit_reached", "credit_balance_exhausted"}
     if code in quota_codes or error_type == "insufficient_quota":
-        return "OpenAI quota or billing limit was reached after bounded retries."
+        return "Groq quota or billing limit was reached after bounded retries."
     if "token" in code:
-        return "OpenAI token rate limit was exceeded after bounded retries."
-    return "OpenAI request rate limit was exceeded after bounded retries."
+        return "Groq token rate limit was exceeded after bounded retries."
+    return "Groq request rate limit was exceeded after bounded retries."
