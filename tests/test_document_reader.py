@@ -23,6 +23,22 @@ def test_valid_selectable_pdf(tmp_path):
     assert "Freight document" in read_document(path)
 
 
+def test_original_employer_pdf_contains_required_selectable_text():
+    path = Path(__file__).parents[1] / "samples" / "original_document.pdf"
+    text = read_document(path)
+    expected_fragments = [
+        "Apex Logistics Solutions LLC",
+        "LD-994821",
+        "Dallas, TX 75201",
+        "Atlanta, GA 30303",
+        "$2,200.00",
+        "$350.00",
+        "$2,800.00",
+        "46,800 lbs",
+    ]
+    assert all(fragment in text for fragment in expected_fragments)
+
+
 @pytest.mark.parametrize("suffix", [".txt", ".pdf"])
 def test_empty_document(tmp_path, suffix):
     path = tmp_path / f"empty{suffix}"

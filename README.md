@@ -72,8 +72,10 @@ freightguard-ai/
 ├── samples/
 │   ├── freight_document.txt
 │   ├── freight_document.pdf
+│   ├── original_document.pdf
 │   ├── expected_output.json
-│   └── actual_output.json
+│   ├── actual_output.json
+│   └── actual_output_pdf.json
 ├── tests/
 ├── main.py
 ├── requirements.txt
@@ -159,12 +161,14 @@ PDF input:
 
 ```bash
 python main.py --input samples/freight_document.pdf
+python main.py --input samples/original_document.pdf
 ```
 
 Save the full result:
 
 ```bash
 python main.py --input samples/freight_document.txt --output samples/actual_output.json
+python main.py --input samples/original_document.pdf --output samples/actual_output_pdf.json
 ```
 
 Exit code `0` means approved, `1` means processed but flagged for review, and `2` means the input/output file operation failed. A flagged business result is valid output, not a crash.
@@ -173,7 +177,7 @@ Library callers can use `process_document(raw_text)` or instantiate `FreightProc
 
 ## Running tests
 
-Tests never call the live API. They mock the extraction boundary and cover schema constraints, PDF/TXT reading, LLM failures and refusals, rate precision, weight boundaries, incomplete records, decisions, CLI output, and end-to-end orchestration.
+Tests never call the live API. They mock the extraction boundary and cover schema constraints, reconstructed and original PDF/TXT reading, LLM failures and refusals, rate precision, weight boundaries, incomplete records, decisions, CLI output, and end-to-end orchestration.
 
 ```bash
 python -m pytest -v
@@ -199,13 +203,14 @@ The document artifacts are deliberately distinguished:
 |---|---|---|
 | `samples/freight_document.txt` | Plain-text test fixture preserving the supplied case content | Reader and mocked pipeline tests |
 | `samples/freight_document.pdf` | Reconstructed selectable-text fixture created from that content | PDF reader tests; not the original upload |
-| `samples/original_document.pdf` | Reserved path for the byte-for-byte employer-supplied `Document.pdf` | Not present: `Document.pdf` was not available anywhere in the workspace |
+| `samples/original_document.pdf` | Byte-for-byte copy of the employer-supplied `Document.pdf` | Selectable-text reader test and successful live Groq processing |
 | `samples/expected_output.json` | Deterministic expected result | Compared in automated tests |
 | `samples/actual_output.json` | Successful live Groq result for the text fixture | Exactly matches expected output |
+| `samples/actual_output_pdf.json` | Successful live Groq result for the original PDF | All eight fields and both issues verified; exactly matches expected output |
 
-No substitute has been created or labeled as the original. If `Document.pdf` becomes available, it should be copied byte-for-byte to `samples/original_document.pdf`, verified with the existing reader, and processed live before adding `actual_output_pdf.json`.
+The original and repository PDF copies were verified byte-for-byte with SHA-256 before testing. The original PDF contains selectable text preserving the carrier, load number, pickup, delivery, three monetary amounts, and gross weight. It is retained separately from the reconstructed PDF so their provenance remains unambiguous.
 
-A live Groq request using `openai/gpt-oss-20b` successfully extracted the supplied text fixture. The checked-in `samples/actual_output.json` exactly matches `samples/expected_output.json`: it preserves `total_pay` as `2800.0`, reports `RATE_MISMATCH` and `OVERWEIGHT_LOAD`, and returns `FLAGGED_FOR_HUMAN_REVIEW`.
+Live Groq requests using `openai/gpt-oss-20b` successfully extracted both the text fixture and original PDF. The checked-in actual outputs exactly match `samples/expected_output.json`: they preserve `total_pay` as `2800.0`, report `RATE_MISMATCH` and `OVERWEIGHT_LOAD`, and return `FLAGGED_FOR_HUMAN_REVIEW`.
 
 ## Business validation rules
 
@@ -236,7 +241,6 @@ At 100,000 documents per day the average arrival rate is about 1.16 documents pe
 ## Limitations and future improvements
 
 - Scanned/image-only PDFs need an OCR service before extraction.
-- The original uploaded `Document.pdf` is unavailable locally; the checked-in PDF is a reconstructed selectable-text fixture and has been tested only as such.
 - Live LLM calls require a key for the selected provider and depend on provider availability, quota, and rate limits.
 - OpenAI is implemented and mock-tested, but live OpenAI verification remains unavailable due to insufficient API quota.
 - The CLI processes one document at a time; batch queues and persistence are future production concerns.
