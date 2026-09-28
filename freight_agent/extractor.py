@@ -54,7 +54,7 @@ class OpenAIExtractionService:
         except openai.AuthenticationError as exc:
             raise DocumentExtractionError("OpenAI authentication failed. Check OPENAI_API_KEY.") from exc
         except openai.RateLimitError as exc:
-            raise DocumentExtractionError("OpenAI rate limit exceeded after bounded retries.") from exc
+            raise DocumentExtractionError(_rate_limit_message(exc)) from exc
         except openai.APITimeoutError as exc:
             raise DocumentExtractionError("OpenAI request timed out after bounded retries.") from exc
         except openai.APIConnectionError as exc:
@@ -81,3 +81,18 @@ def _find_refusal(response: Any) -> str | None:
             if getattr(content, "type", None) == "refusal":
                 return getattr(content, "refusal", None) or "Request refused"
     return None
+
+
+def _rate_limit_message(exc: openai.RateLimitError) -> str:
+    """Classify common rate-limit failures without exposing provider payloads."""
+    body = getattr(exc, "body", None)
+    body_code = body.get("code", "") if isinstance(body, dict) else ""
+    body_type = body.get("type", "") if isinstance(body, dict) else ""
+    code = str(getattr(exc, "code", "") or body_code).lower()
+    error_type = str(body_type).lower()
+    quota_codes = {"insufficient_quota", "billing_hard_limit_reached", "credit_balance_exhausted"}
+    if code in quota_codes or error_type == "insufficient_quota":
+        return "OpenAI quota or billing limit was reached after bounded retries."
+    if "token" in code:
+        return "OpenAI token rate limit was exceeded after bounded retries."
+    return "OpenAI request rate limit was exceeded after bounded retries."

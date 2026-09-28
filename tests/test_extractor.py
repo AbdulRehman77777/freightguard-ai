@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import openai
+import httpx
 import pytest
 
 from freight_agent.config import Settings, load_settings
@@ -53,3 +54,27 @@ def test_refusal_handling():
     client.responses.parse.return_value = SimpleNamespace(output_parsed=None, output=output)
     with pytest.raises(DocumentExtractionError, match="refused"):
         OpenAIExtractionService(settings(), client).extract("document")
+
+
+@pytest.mark.parametrize(
+    ("code", "message"),
+    [
+        ("insufficient_quota", "quota or billing"),
+        ("credit_balance_exhausted", "quota or billing"),
+        ("tokens_per_minute", "token rate limit"),
+        ("rate_limit_exceeded", "request rate limit"),
+    ],
+)
+def test_rate_limit_failures_are_safely_classified(code, message):
+    request = httpx.Request(method="POST", url="https://api.openai.com/v1/responses")
+    response = httpx.Response(status_code=429, request=request)
+    error = openai.RateLimitError(
+        "provider details must not leak",
+        response=response,
+        body={"code": code},
+    )
+    client = Mock()
+    client.responses.parse.side_effect = error
+    with pytest.raises(DocumentExtractionError, match=message) as exc_info:
+        OpenAIExtractionService(settings(), client).extract("document")
+    assert "provider details" not in str(exc_info.value)

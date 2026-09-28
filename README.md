@@ -1,5 +1,9 @@
 # FreightGuard AI
 
+*LLM-Powered Freight Document Extraction and Validation*
+
+## Project overview
+
 FreightGuard AI is a production-minded Python CLI that converts unstructured freight documents into validated JSON and makes a conservative, deterministic approval decision. It accepts UTF-8 text and selectable-text PDFs, uses OpenAI Structured Outputs only for field extraction, and keeps schema enforcement and business decisions in ordinary Python.
 
 ## Problem statement
@@ -80,7 +84,7 @@ freightguard-ai/
 Python 3.10 or newer is required.
 
 ```bash
-git clone <repository-url>
+git clone <ACTUAL_REPOSITORY_URL>
 cd freightguard-ai
 python -m venv .venv
 ```
@@ -106,7 +110,7 @@ cp .env.example .env
 
 Replace the placeholder in `.env` with a valid OpenAI API key. Never commit `.env`.
 
-## Configuration
+## Environment configuration
 
 | Variable | Required | Default | Purpose |
 |---|---:|---|---|
@@ -163,13 +167,19 @@ The included sample states a `$2,200.00` linehaul rate, `$350.00` fuel surcharge
 }
 ```
 
-The expected fixture is the deterministic target, not a claim of a live API run. `samples/actual_output.json` is intentionally gitignored and should only be created by an authenticated execution.
+The expected fixture is the deterministic target, not a claim of a successful live API run. The included `.txt` accurately preserves the provided case content, and the `.pdf` is a reconstructed selectable-text fixture created from that content; it is not the original uploaded PDF. The original `Document.pdf` was not available in this workspace and therefore was not tested. Add it separately under `samples/` before submission if it becomes available.
+
+The latest bounded live request reached OpenAI but failed with HTTP 429 `credit_balance_exhausted` (`insufficient_quota`), so live extraction has not yet been successfully verified and no `actual_output.json` is claimed. After billing/credits are available, the documented save command can generate that file from a real run; it is gitignored to prevent a failed or local run from being mistaken for the checked-in expected fixture.
 
 ## Business validation rules
 
-1. `RATE_MISMATCH` (`ERROR`): linehaul plus fuel must equal the explicitly stated total. Values are converted through `Decimal(str(value))`, normalized to cents, and never rewritten.
-2. `OVERWEIGHT_LOAD` (`WARNING`): weights above 45,000 lbs are flagged. Exactly 45,000 lbs is allowed.
-3. `INCOMPLETE_DATA` (`ERROR`): missing, blank, ambiguous, or structurally invalid required fields are listed. Checks that lack operands are skipped rather than calculated with invented defaults.
+| Rule | Severity | Behavior |
+|---|---|---|
+| `RATE_MISMATCH` | `ERROR` | Linehaul plus fuel must equal the explicitly stated total. Values are compared as `Decimal` amounts at cent precision and never rewritten. |
+| `OVERWEIGHT_LOAD` | `WARNING` | Weight above 45,000 lbs is flagged; exactly 45,000 lbs is allowed. |
+| `INCOMPLETE_DATA` | `ERROR` | Missing, blank, ambiguous, or structurally invalid required fields are reported. |
+
+The supplied case has a $250 discrepancy (`$2,200 + $350 = $2,550`, versus the stated `$2,800`) and exceeds the weight threshold by 1,800 lbs (`46,800 lbs`). Both independent issues are returned, producing `FLAGGED_FOR_HUMAN_REVIEW` while preserving `total_pay` as `2800.0`.
 
 Any error or warning produces `FLAGGED_FOR_HUMAN_REVIEW`. Only a complete record with no issues is `APPROVED`. Extraction or processing failures are represented by `EXTRACTION_FAILED` or `PROCESSING_ERROR` and can never be approved.
 
@@ -179,21 +189,19 @@ The raw document is sent as a separate user message and is treated as untrusted 
 
 The SDK uses a bounded timeout and bounded retries. Authentication failures, rate limits, timeouts, connection errors, refusals, absent parsed output, unsupported formats, unreadable files, and empty/scanned PDFs produce controlled failures. OCR is not performed in this lightweight version.
 
-## How strict JSON output is ensured
+## Architecture and scalability note
 
 The application uses OpenAI Structured Outputs through `client.responses.parse` with `ExtractionFreightDocument` supplied as the native Pydantic `text_format`. This constrains the API response to the declared schema and returns a typed model, which is materially safer than asking for JSON in a prompt and manually decoding arbitrary text. The extraction prompt additionally requires faithful source values, nulls for unavailable data, and no commentary, but prompt text is not the enforcement mechanism—the API schema is.
 
-Validation has two stages. The extraction model deliberately allows nulls so the model can report genuinely absent or ambiguous source information without hallucinating. The result is then validated against strict `FreightDocument`, which rejects missing fields, extras, blanks, malformed locations and ZIPs, negative/non-finite money, and negative weight. Incomplete data remains available as `partial_document` but cannot be approved. Independent deterministic Python rules reconcile money with `Decimal`, enforce the weight limit, and create the final decision; the LLM does not participate in those rules.
-
-## Scaling to 100,000 PDFs per day
-
-The current implementation is intentionally a synchronous CLI; it does not claim to implement a distributed processing platform. A production design would upload PDFs to object storage such as Amazon S3, emit ingestion events into a durable queue such as SQS, and use horizontally scaled workers. Workers would extract selectable text, route scanned pages through OCR, preprocess and classify documents, call a separately rate-limited LLM extraction service, apply the same Pydantic and deterministic validation layers, and persist structured results and validation outcomes. Flagged documents would enter a human-review queue.
+Validation then moves from the nullable extraction model—which allows genuinely missing or ambiguous values to be represented as `null` without hallucination—to strict `FreightDocument`. The final schema rejects missing fields, extras, type coercion, blanks, malformed locations and ZIPs, negative/non-finite money, and negative weight, so missing or invalid data cannot be approved. Independent deterministic Python rules reconcile money with `Decimal`, enforce the weight limit, and make the decision; the LLM does not calculate replacement totals or approve documents. For production scale, PDFs would land in object storage such as Amazon S3 and produce jobs in a durable queue such as Amazon SQS. Horizontally scalable workers would perform PDF text extraction, use OCR as a fallback for scanned pages, call the LLM extractor, apply Pydantic and business validation, persist results, and route flagged records to human review. This is a scaling design, not infrastructure implemented by the current synchronous CLI.
 
 At 100,000 documents per day the average arrival rate is about 1.16 documents per second, but capacity planning must cover spikes, page count and OCR complexity, LLM latency, and provider quotas. Workers should use exponential backoff for transient failures, bounded retries, dead-letter queues for repeated failures, and idempotency keys based on stable upload/job identifiers to prevent duplicate billing and results. Operational monitoring should track queue depth, latency, extraction/validation failure rates, review rate, token usage, and cost while logging only safe document-processing metadata—not credentials or unnecessary document content.
 
 ## Limitations and future improvements
 
 - Scanned/image-only PDFs need an OCR service before extraction.
+- The original uploaded `Document.pdf` is unavailable locally; the checked-in PDF is a reconstructed selectable-text fixture and has been tested only as such.
+- Live LLM calls require a configured API key and depend on available billing/credits and provider rate limits; the latest attempt failed because the configured account's credit balance was exhausted.
 - The CLI processes one document at a time; batch queues and persistence are future production concerns.
 - Live quality depends on the configured model and should be measured with a versioned evaluation corpus.
 - Additional currencies, unit conversion, carrier compliance checks, and confidence/review tooling can be added as explicit deterministic policies.

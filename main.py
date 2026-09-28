@@ -21,12 +21,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def render_terminal(result: ProcessingResult) -> str:
-    lines = ["Document processing result", f"Final decision: {result.status}", ""]
+    lines = ["Document processing result", f"Final decision: {result.status.value}", ""]
     payload = result.document.model_dump() if result.document else result.partial_document
     lines.extend(["Extracted document information", json.dumps(payload, indent=2) if payload else "Unavailable", ""])
     lines.append("Validation issues")
     if result.issues:
-        lines.extend(f"- [{issue.severity}] {issue.code}: {issue.message}" for issue in result.issues)
+        lines.extend(f"- [{issue.severity.value}] {issue.code}: {issue.message}" for issue in result.issues)
     else:
         lines.append("- None")
     lines.extend(["", f"Summary: {result.summary}"])

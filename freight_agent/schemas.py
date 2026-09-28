@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import re
-from enum import StrEnum
+from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -14,7 +14,7 @@ STATE_PATTERN = re.compile(r"^[A-Z]{2}$")
 
 
 class StrictModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
 
 class ExtractionLocation(StrictModel):
@@ -92,12 +92,12 @@ class FreightDocument(StrictModel):
         return value
 
 
-class Severity(StrEnum):
+class Severity(str, Enum):
     ERROR = "ERROR"
     WARNING = "WARNING"
 
 
-class DecisionStatus(StrEnum):
+class DecisionStatus(str, Enum):
     APPROVED = "APPROVED"
     FLAGGED_FOR_HUMAN_REVIEW = "FLAGGED_FOR_HUMAN_REVIEW"
 

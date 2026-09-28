@@ -42,6 +42,21 @@ def test_unexpected_fields_rejected(valid_data):
         FreightDocument.model_validate(valid_data)
 
 
+def test_final_schema_rejects_type_coercion(valid_data):
+    valid_data["weight_lbs"] = "44000"
+    with pytest.raises(ValidationError):
+        FreightDocument.model_validate(valid_data)
+
+
+def test_extraction_schema_requires_every_key_and_forbids_extras(valid_data):
+    valid_data.pop("load_number")
+    valid_data["unexpected"] = None
+    with pytest.raises(ValidationError) as exc_info:
+        ExtractionFreightDocument.model_validate(valid_data)
+    error_types = {error["type"] for error in exc_info.value.errors()}
+    assert {"missing", "extra_forbidden"} <= error_types
+
+
 def test_extraction_model_allows_nulls():
     extracted = ExtractionFreightDocument(
         carrier_name=None,

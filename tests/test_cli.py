@@ -1,7 +1,7 @@
 import json
 
 from freight_agent.schemas import DecisionStatus, ProcessingResult
-from main import main
+from main import main, render_terminal
 
 
 def test_cli_writes_output(monkeypatch, tmp_path):
@@ -12,3 +12,10 @@ def test_cli_writes_output(monkeypatch, tmp_path):
     monkeypatch.setattr("main.process_document", lambda text: result)
     assert main(["--input", str(source), "--output", str(output)]) == 0
     assert json.loads(output.read_text())["status"] == "APPROVED"
+
+
+def test_terminal_uses_public_enum_values():
+    result = ProcessingResult(status=DecisionStatus.APPROVED, issues=[], summary="Approved")
+    rendered = render_terminal(result)
+    assert "Final decision: APPROVED" in rendered
+    assert "DecisionStatus" not in rendered
